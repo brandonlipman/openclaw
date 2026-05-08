@@ -589,6 +589,20 @@ describe("DiscordVoiceManager", () => {
     const result = await manager.join({ guildId: "g1", channelId: "1001" });
 
     expect(result.ok).toBe(true);
+    const entry = (manager as unknown as { sessions: Map<string, unknown> }).sessions.get("g1") as
+      | {
+          realtime?: {
+            setSpeakerContext: (
+              context: { extraSystemPrompt?: string; senderIsOwner: boolean; speakerLabel: string },
+              userId: string,
+            ) => void;
+          };
+        }
+      | undefined;
+    entry?.realtime?.setSpeakerContext(
+      { extraSystemPrompt: undefined, senderIsOwner: true, speakerLabel: "Owner" },
+      "u-owner",
+    );
     expect(resolveConfiguredRealtimeVoiceProviderMock).toHaveBeenCalledWith(
       expect.objectContaining({
         configuredProviderId: "openai",
@@ -642,6 +656,20 @@ describe("DiscordVoiceManager", () => {
     });
 
     await manager.join({ guildId: "g1", channelId: "1001" });
+    const entry = (manager as unknown as { sessions: Map<string, unknown> }).sessions.get("g1") as
+      | {
+          realtime?: {
+            setSpeakerContext: (
+              context: { extraSystemPrompt?: string; senderIsOwner: boolean; speakerLabel: string },
+              userId: string,
+            ) => void;
+          };
+        }
+      | undefined;
+    entry?.realtime?.setSpeakerContext(
+      { extraSystemPrompt: undefined, senderIsOwner: true, speakerLabel: "Owner" },
+      "u-owner",
+    );
 
     const bridgeParams = createRealtimeVoiceBridgeSessionMock.mock.calls.at(-1)?.[0] as
       | {
@@ -674,6 +702,7 @@ describe("DiscordVoiceManager", () => {
     );
     await Promise.resolve();
     await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 20));
 
     expect(realtimeSessionMock.submitToolResult).toHaveBeenCalledWith(
       "call-1",
