@@ -270,7 +270,7 @@ export async function applyGoogleChatInboundAccessPolicy(params: {
         routeEnabled: groupEntry?.enabled !== false,
       })
     : null;
-  const { ingress, access } = await resolveGoogleChatIngressAccess({
+  const { ingress, access, commandAuthorized } = await resolveGoogleChatIngressAccess({
     accountId: account.accountId,
     accessGroups: config.accessGroups,
     isGroup,
@@ -286,6 +286,10 @@ export async function applyGoogleChatInboundAccessPolicy(params: {
     allowFrom: configAllowFrom,
     groupAllowFrom: expandedGroupUsers,
     storeAllowFrom: effectiveStoreAllowFrom,
+    command: {
+      useAccessGroups: config.commands?.useAccessGroups !== false,
+      hasControlCommand: shouldComputeAuth,
+    },
   });
 
   if (isGroup) {
@@ -314,24 +318,7 @@ export async function applyGoogleChatInboundAccessPolicy(params: {
   }
 
   const effectiveAllowFrom = access.effectiveAllowFrom;
-  const effectiveGroupAllowFrom = access.effectiveGroupAllowFrom;
   warnDeprecatedUsersEmailEntries(logVerbose, effectiveAllowFrom);
-  const commandAllowFrom = isGroup ? effectiveGroupAllowFrom : effectiveAllowFrom;
-  const useAccessGroups = config.commands?.useAccessGroups !== false;
-  const senderAllowedForCommands = isSenderAllowed(
-    senderId,
-    senderEmail,
-    commandAllowFrom,
-    allowNameMatching,
-  );
-  const commandAuthorized = shouldComputeAuth
-    ? core.channel.commands.resolveCommandAuthorizedFromAuthorizers({
-        useAccessGroups,
-        authorizers: [
-          { configured: commandAllowFrom.length > 0, allowed: senderAllowedForCommands },
-        ],
-      })
-    : undefined;
 
   if (isGroup) {
     const requireMention = groupEntry?.requireMention ?? account.config.requireMention ?? true;

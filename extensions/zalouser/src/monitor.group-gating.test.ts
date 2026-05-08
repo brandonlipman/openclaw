@@ -416,7 +416,7 @@ describe("zalouser monitor group mention gating", () => {
 
   async function expectGroupCommandAuthorizers(params: {
     accountConfig: ResolvedZalouserAccount["config"];
-    expectedAuthorizers: Array<{ configured: boolean; allowed: boolean }>;
+    expectedCommandAuthorized: boolean;
   }) {
     const { dispatchReplyWithBufferedBlockDispatcher, resolveCommandAuthorizedFromAuthorizers } =
       installGroupCommandAuthRuntime();
@@ -427,8 +427,9 @@ describe("zalouser monitor group mention gating", () => {
       },
     });
     expect(dispatchReplyWithBufferedBlockDispatcher).toHaveBeenCalledTimes(1);
-    const authCall = resolveCommandAuthorizedFromAuthorizers.mock.calls[0]?.[0];
-    expect(authCall?.authorizers).toEqual(params.expectedAuthorizers);
+    expect(resolveCommandAuthorizedFromAuthorizers).not.toHaveBeenCalled();
+    const callArg = dispatchReplyWithBufferedBlockDispatcher.mock.calls[0]?.[0];
+    expect(callArg?.ctx?.CommandAuthorized).toBe(params.expectedCommandAuthorized);
   }
 
   async function processOpenDmMessage(params?: {
@@ -663,10 +664,7 @@ describe("zalouser monitor group mention gating", () => {
         ...createAccount().config,
         allowFrom: ["123"],
       },
-      expectedAuthorizers: [
-        { configured: true, allowed: true },
-        { configured: true, allowed: true },
-      ],
+      expectedCommandAuthorized: true,
     });
   });
 
@@ -818,10 +816,7 @@ describe("zalouser monitor group mention gating", () => {
         allowFrom: ["999"],
         groupAllowFrom: ["123"],
       },
-      expectedAuthorizers: [
-        { configured: true, allowed: false },
-        { configured: true, allowed: true },
-      ],
+      expectedCommandAuthorized: true,
     });
   });
 

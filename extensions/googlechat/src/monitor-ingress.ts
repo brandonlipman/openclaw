@@ -3,6 +3,7 @@ import {
   createChannelIngressPluginId,
   createChannelIngressMultiIdentifierAdapter,
   decideChannelIngress,
+  findChannelIngressCommandGate,
   findChannelIngressSenderGate,
   resolveChannelIngressState,
   type ChannelIngressAdapterEntry,
@@ -322,23 +323,29 @@ export async function resolveGoogleChatIngressAccess(params: {
   allowFrom: string[];
   groupAllowFrom: string[];
   storeAllowFrom: string[];
+  command?: {
+    useAccessGroups: boolean;
+    hasControlCommand: boolean;
+  };
 }) {
   const senderGroupPolicy = resolveSenderGroupPolicy({
     groupPolicy: params.groupPolicy,
     routeAllowlistConfigured: params.routeAllowlistConfigured,
     groupAllowFrom: params.groupAllowFrom,
   });
+  const subject = createGoogleChatIngressSubject({
+    senderId: params.senderId,
+    senderEmail: params.senderEmail,
+  });
+  const conversation = {
+    kind: params.isGroup ? "group" : "direct",
+    id: params.spaceId,
+  } as const;
   const state = await resolveChannelIngressState({
     channelId: GOOGLECHAT_CHANNEL_ID,
     accountId: params.accountId,
-    subject: createGoogleChatIngressSubject({
-      senderId: params.senderId,
-      senderEmail: params.senderEmail,
-    }),
-    conversation: {
-      kind: params.isGroup ? "group" : "direct",
-      id: params.spaceId,
-    },
+    subject,
+    conversation,
     adapter: googleChatIngressAdapter,
     accessGroups: params.accessGroups,
     routeFacts: createGoogleChatRouteFacts({
@@ -367,20 +374,55 @@ export async function resolveGoogleChatIngressAccess(params: {
     mutableIdentifierMatching: params.allowNameMatching ? "enabled" : "disabled",
   };
   const ingress = decideChannelIngress(state, policy);
+  const effectiveAllowFrom = effectiveDmAllowFrom({
+    allowFrom: params.allowFrom,
+    storeAllowFrom: params.storeAllowFrom,
+    dmPolicy: params.dmPolicy,
+  });
+  const commandAuthorized =
+    params.command == null
+      ? undefined
+      : findChannelIngressCommandGate(
+          decideChannelIngress(
+            await resolveChannelIngressState({
+              channelId: GOOGLECHAT_CHANNEL_ID,
+              accountId: params.accountId,
+              subject,
+              conversation,
+              adapter: googleChatIngressAdapter,
+              event: {
+                kind: "message",
+                authMode: "none",
+                mayPair: false,
+              },
+              allowlists: {
+                commandOwner: params.isGroup ? [] : effectiveAllowFrom,
+                commandGroup: params.isGroup ? params.groupAllowFrom : [],
+              },
+            }),
+            {
+              dmPolicy: params.dmPolicy,
+              groupPolicy: "open",
+              mutableIdentifierMatching: params.allowNameMatching ? "enabled" : "disabled",
+              command: {
+                useAccessGroups: params.command.useAccessGroups,
+                allowTextCommands: false,
+                hasControlCommand: params.command.hasControlCommand,
+              },
+            },
+          ),
+        )?.allowed === true;
   const access = accessFromIngress({
     ingress,
     isGroup: params.isGroup,
     dmPolicy: params.dmPolicy,
     groupPolicy: senderGroupPolicy,
-    effectiveAllowFrom: effectiveDmAllowFrom({
-      allowFrom: params.allowFrom,
-      storeAllowFrom: params.storeAllowFrom,
-      dmPolicy: params.dmPolicy,
-    }),
+    effectiveAllowFrom,
     effectiveGroupAllowFrom: params.groupAllowFrom,
   });
   return {
     ingress,
     access,
+    commandAuthorized,
   };
 }

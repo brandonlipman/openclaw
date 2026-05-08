@@ -372,9 +372,12 @@ describe("googlechat inbound access policy", () => {
       effectiveGroupAllowFrom: [],
       effectiveWasMentioned: false,
     });
+    resolveAllowlistProviderRuntimeGroupPolicy.mockReturnValue({
+      groupPolicy: "open",
+      providerMissingFallbackApplied: false,
+    });
     const core = createCore();
     core.channel.commands.shouldComputeCommandAuthorized.mockReturnValue(true);
-    core.channel.commands.resolveCommandAuthorizedFromAuthorizers.mockReturnValue(false);
     core.channel.commands.isControlCommandMessage.mockReturnValue(true);
     const logVerbose = vi.fn();
 
@@ -386,7 +389,6 @@ describe("googlechat inbound access policy", () => {
           config: {
             groups: {
               "spaces/AAA": {
-                users: ["users/alice"],
                 requireMention: false,
               },
             },

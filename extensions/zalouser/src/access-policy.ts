@@ -7,9 +7,11 @@ import {
   createChannelIngressMultiIdentifierAdapter,
   createChannelIngressSubject,
   decideChannelIngress,
+  findChannelIngressCommandGate,
   findChannelIngressSenderGate,
   resolveChannelIngressState,
   type ChannelIngressDecision,
+  type ChannelIngressPolicyInput,
   type IngressReasonCode,
 } from "openclaw/plugin-sdk/channel-ingress";
 import type { DmPolicy, GroupPolicy, OpenClawConfig } from "openclaw/plugin-sdk/config-types";
@@ -114,17 +116,22 @@ export async function resolveZalouserIngressAccess(params: {
   accountId: string;
   isGroup: boolean;
   senderId: string;
+  rawBody: string;
   dmPolicy: string;
   groupPolicy: string;
   allowFrom?: Array<string | number>;
   groupAllowFrom?: Array<string | number>;
   storeAllowFrom?: Array<string | number>;
+  commandRuntime: {
+    shouldComputeCommandAuthorized: (rawBody: string, cfg: OpenClawConfig) => boolean;
+  };
 }): Promise<{
   ingress: ChannelIngressDecision;
   decision: DmGroupAccessDecision;
   reasonCode: DmGroupAccessReasonCode;
   effectiveAllowFrom: string[];
   effectiveGroupAllowFrom: string[];
+  commandAuthorized: boolean | undefined;
 }> {
   const dmPolicy = normalizeDmPolicy(params.dmPolicy);
   const groupPolicy = normalizeGroupPolicy(params.groupPolicy);
@@ -138,6 +145,14 @@ export async function resolveZalouserIngressAccess(params: {
     groupAllowFrom: params.groupAllowFrom,
     fallbackToAllowFrom: false,
   });
+  const commandGroupAllowFrom = resolveGroupAllowFromSources({
+    allowFrom: params.allowFrom,
+    groupAllowFrom: params.groupAllowFrom,
+  });
+  const shouldComputeCommandAuth = params.commandRuntime.shouldComputeCommandAuthorized(
+    params.rawBody,
+    params.cfg,
+  );
   const state = await resolveChannelIngressState({
     channelId: ZALOUSER_CHANNEL_ID,
     accountId: params.accountId,
@@ -160,13 +175,25 @@ export async function resolveZalouserIngressAccess(params: {
       dm: params.allowFrom,
       group: params.groupAllowFrom,
       pairingStore: params.isGroup ? [] : params.storeAllowFrom,
+      commandOwner: effectiveAllowFrom,
+      commandGroup: commandGroupAllowFrom,
     },
   });
-  const ingress = decideChannelIngress(state, {
+  const policy: ChannelIngressPolicyInput = {
     dmPolicy,
     groupPolicy,
     groupAllowFromFallbackToAllowFrom: false,
-  });
+    ...(shouldComputeCommandAuth
+      ? {
+          command: {
+            useAccessGroups: params.cfg.commands?.useAccessGroups !== false,
+            allowTextCommands: false,
+            hasControlCommand: true,
+          },
+        }
+      : {}),
+  };
+  const ingress = decideChannelIngress(state, policy);
   const mappedReasonCode = mapReasonCode({
     reasonCode: findSenderGateReason(ingress, params.isGroup),
     isGroup: params.isGroup,
@@ -180,5 +207,8 @@ export async function resolveZalouserIngressAccess(params: {
     reasonCode: mappedReasonCode,
     effectiveAllowFrom,
     effectiveGroupAllowFrom,
+    commandAuthorized: shouldComputeCommandAuth
+      ? findChannelIngressCommandGate(ingress)?.allowed === true
+      : undefined,
   };
 }

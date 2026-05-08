@@ -44,6 +44,10 @@
     "target": "频道入口 API"
   },
   {
+    "source": "Channel ingress refactor plan",
+    "target": "频道入口重构计划"
+  },
+  {
     "source": "Talk mode",
     "target": "Talk 模式"
   },

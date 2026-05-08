@@ -29,7 +29,6 @@ import type { MsgContext } from "openclaw/plugin-sdk/reply-runtime";
 import { logVerbose } from "openclaw/plugin-sdk/runtime-env";
 import { normalizeOptionalLowercaseString } from "openclaw/plugin-sdk/text-runtime";
 import type { NormalizedAllowFrom } from "./bot-access.js";
-import { isSenderAllowed } from "./bot-access.js";
 import type {
   TelegramLogger,
   TelegramMediaRef,
@@ -184,11 +183,6 @@ export async function resolveTelegramInboundBody(params: {
   const mentionRegexes = buildMentionRegexes(cfg, routeAgentId);
   const messageTextParts = getTelegramTextParts(msg);
   const allowForCommands = isGroup ? effectiveGroupAllow : effectiveDmAllow;
-  const senderAllowedForCommands = isSenderAllowed({
-    allow: allowForCommands,
-    senderId,
-    senderUsername,
-  });
   const useAccessGroups = cfg.commands?.useAccessGroups !== false;
   const hasControlCommandInMessage = hasControlCommand(messageTextParts.text, cfg, {
     botUsername,
@@ -252,7 +246,7 @@ export async function resolveTelegramInboundBody(params: {
     (topicConfig?.disableAudioPreflight ??
       (groupConfig as TelegramGroupConfig | undefined)?.disableAudioPreflight) === true;
   const senderAllowedForAudioPreflight =
-    !useAccessGroups || !allowForCommands.hasEntries || senderAllowedForCommands;
+    !useAccessGroups || !allowForCommands.hasEntries || commandAuthorized;
 
   let preflightTranscript: string | undefined;
   const needsPreflightTranscription =

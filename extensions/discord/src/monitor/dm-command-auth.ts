@@ -487,3 +487,67 @@ export async function resolveDiscordTextCommandAccess(params: {
     shouldBlockControlCommand: commandGate?.command?.shouldBlockControlCommand === true,
   };
 }
+
+export async function resolveDiscordCommandAuthorizersWithIngress(params: {
+  accountId: string;
+  sender: { id: string; name?: string; tag?: string };
+  useAccessGroups: boolean;
+  authorizers: Array<{ configured: boolean; allowed: boolean }>;
+  modeWhenAccessGroupsOff?: NonNullable<
+    ChannelIngressPolicyInput["command"]
+  >["modeWhenAccessGroupsOff"];
+}): Promise<boolean> {
+  const groupNames = params.authorizers.map((_, index) => `discord-command-authorizer-${index}`);
+  const configuredGroupEntries = params.authorizers.flatMap((authorizer, index) =>
+    authorizer.configured ? [`accessGroup:${groupNames[index]}`] : [],
+  );
+  const ingressState = await resolveChannelIngressState({
+    channelId: DISCORD_CHANNEL_ID,
+    accountId: params.accountId,
+    subject: createDiscordDmIngressSubject(params.sender),
+    conversation: {
+      kind: "group",
+      id: "discord-command-authorizers",
+    },
+    adapter: discordDmIngressAdapter,
+    accessGroupMembership: params.authorizers.flatMap((authorizer, index) => {
+      if (!authorizer.configured) {
+        return [];
+      }
+      const groupName = groupNames[index];
+      return [
+        authorizer.allowed
+          ? ({
+              kind: "matched",
+              groupName,
+              source: "dynamic",
+              matchedEntryIds: [groupName],
+            } satisfies AccessGroupMembershipFact)
+          : ({
+              kind: "not-matched",
+              groupName,
+              source: "dynamic",
+            } satisfies AccessGroupMembershipFact),
+      ];
+    }),
+    event: {
+      kind: "native-command",
+      authMode: "none",
+      mayPair: false,
+    },
+    allowlists: {
+      commandGroup: configuredGroupEntries,
+    },
+  });
+  const decision = decideChannelIngress(ingressState, {
+    dmPolicy: "allowlist",
+    groupPolicy: "open",
+    command: {
+      useAccessGroups: params.useAccessGroups,
+      allowTextCommands: false,
+      hasControlCommand: true,
+      modeWhenAccessGroupsOff: params.modeWhenAccessGroupsOff,
+    },
+  });
+  return findChannelIngressCommandGate(decision)?.allowed === true;
+}
